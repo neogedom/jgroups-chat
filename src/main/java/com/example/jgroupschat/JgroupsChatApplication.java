@@ -1,20 +1,23 @@
 package com.example.jgroupschat;
 
 import org.jgroups.*;
+import org.jgroups.util.Util;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.*;
+import java.util.LinkedList;
+import java.util.List;
 
 @SpringBootApplication
 public class JgroupsChatApplication implements Receiver {
 
 	JChannel channel;
 	String user_name = System.getProperty("user.name","n/a");
+	final List<String> state=new LinkedList<>();
 
 	private void start() throws Exception {
-		channel = new JChannel().setReceiver(this).connect("ChatCluster");
+		channel = new JChannel().setReceiver(this).connect("ChatCluster").getState(null, 1000);
 		eventLoop();
 		channel.close();
 	}
@@ -47,6 +50,26 @@ public class JgroupsChatApplication implements Receiver {
 	}
 
 	public void receive(Message msg) {
-		System.out.println(msg.getSrc() + ": " + msg.getObject());
+		String line=msg.getSrc() + ": " + msg.getObject();
+		System.out.println(line);
+		synchronized(state) {
+			state.add(line);
+		}
+	}
+
+	public void getState(OutputStream output) throws Exception {
+		synchronized(state) {
+			Util.objectToStream(state, new DataOutputStream(output));
+		}
+	}
+
+	public void setState(InputStream input) throws Exception {
+		List<String> list = Util.objectFromStream(new DataInputStream(input));
+		synchronized(state) {
+			state.clear();
+			state.addAll(list);
+		}
+		System.out.println("received state (" + list.size() + " messages in chat history):");
+		list.forEach(System.out::println);
 	}
 }
